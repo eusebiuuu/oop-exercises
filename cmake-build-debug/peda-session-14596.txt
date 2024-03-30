@@ -1,0 +1,4 @@
+break /home/eusebiuu/CLionProjects/oop-exercises/lab4/exercise1.cpp:139
+break /home/eusebiuu/CLionProjects/oop-exercises/lab4/exercise1.cpp:137
+
+set exec-wrapper logging enabled
