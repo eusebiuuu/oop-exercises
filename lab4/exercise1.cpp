@@ -5,45 +5,14 @@
 class Item {
 protected:
     std::string name;
-    std::string type;
 public:
-    explicit Item(const std::string &name, const std::string &type) {
+    explicit Item(const std::string &name) {
         this->name = name;
-        this->type = type;
     }
 
     virtual std::string getName() const = 0;
 
     virtual ~Item() = default;
-
-    virtual const std::string &getType() const = 0;
-};
-
-class SymLink: public Item {
-    Item* address;
-    std::string itemType;
-public:
-    SymLink(Item* address, const std::string& name, const std::string& type):
-        Item(name, "symlink") {
-        this->address = address;
-        this->itemType = type;
-    }
-
-    Item *getAddress() const {
-        return address;
-    }
-
-    const std::string &getItemType() const {
-        return itemType;
-    }
-
-    std::string getName() const override {
-        return this->name;
-    }
-
-    const std::string &getType() const override {
-        return this->type;
-    }
 };
 
 class File: public Item {
@@ -51,9 +20,14 @@ class File: public Item {
     std::string extension;
 public:
     File(const std::string &name, const std::string& extension, int size = 0):
-        Item(name, "file") {
+        Item(name) {
             this->size = size;
             this->extension = extension;
+    }
+
+    File(const File* file): Item(file->getName()) {
+        this->size = file->size;
+        this->extension = file->extension;
     }
 
     int getSize() const {
@@ -64,10 +38,6 @@ public:
         return this->name;
     }
 
-    const std::string &getType() const override {
-        return this->type;
-    }
-
     const std::string &getExtension() const {
         return extension;
     }
@@ -76,7 +46,11 @@ public:
 class Directory: public Item {
     std::vector<Item*> items;
 public:
-    explicit Directory(const std::string &name): Item(name, "directory"){};
+    explicit Directory(const std::string &name): Item(name){};
+
+    Directory(const Directory* dir): Item(dir->getName()) {
+        this->items = dir->items;
+    }
 
     void addItem(Directory* directory) {
         items.push_back(directory);
@@ -86,12 +60,9 @@ public:
         return this->name;
     }
 
-    const std::string& getType() const override {
-        return this->type;
-    }
-
-    void addItem(File *file) {
+    File* addItem(File *file) {
         items.push_back(file);
+        return file;
     }
 
     void addDirectory(const std::string &name) {
@@ -101,8 +72,10 @@ public:
 
     Directory* navigateTo(const std::string &name) {
         for (Item* item : items) {
-            if (item->getName() == name and item->getType() == "directory") {
-                return dynamic_cast<Directory *>(item);
+            if (auto* currDir = dynamic_cast<Directory *>(item)) {
+                if (currDir->getName() == name) {
+                    return currDir;
+                }
             }
         }
         return nullptr;
@@ -111,11 +84,9 @@ public:
     int getSize() const {
         int totalSize = 0;
         for (Item* item : items) {
-            if (item->getType() == "file") {
-                const auto* currFile = dynamic_cast<const File*>(item);
+            if (auto* currFile = dynamic_cast<File*>(item)) {
                 totalSize += currFile->getSize();
-            } else {
-                const auto* currDir = dynamic_cast<const Directory*>(item);
+            } else if (auto* currDir = dynamic_cast<Directory *>(item)) {
                 totalSize += currDir->getSize();
             }
         }
@@ -132,13 +103,11 @@ public:
             prefix += "  ";
         }
         for (Item* item : directory.items) {
-            if (item->getType() == "file") {
-                const File* currFile = dynamic_cast<const File*>(item);
+            if (auto* currFile = dynamic_cast<File*>(item)) {
                 out << prefix << start << currFile->getName();
                 out << "." << currFile->getExtension();
                 out << " " << currFile->getSize() << "\n";
-            } else if (item->getType() == "directory") {
-                auto* currDir = dynamic_cast<Directory*>(item);
+            } else if (auto* currDir = dynamic_cast<Directory *>(item)) {
                 out << prefix << start << currDir->getName() << '\n';
                 currDir->showHierarchy(out, level + 1, *currDir);
             }
@@ -152,9 +121,24 @@ public:
     }
 };
 
+class SymLink: public Item {
+    Item* pointedItem;
+public:
+    SymLink(Item* item): Item(item->getName()) {
+        this->pointedItem = item;
+    }
+
+    std::string getName() const override {
+        return this->name;
+    }
+
+    Item* getTarget() {
+        return pointedItem;
+    }
+};
 
 int main() {
-    // Item i; can't make a object of class i
+    // Item i; can't make an object of class i
 
     Directory root("/");
     root.addItem(new Directory("bin"));
@@ -162,7 +146,7 @@ int main() {
     Directory *home = root.navigateTo("home");
     home->addDirectory("tim");
     Directory *tim = home->navigateTo("tim");
-    tim->addItem(new File("info", "txt", 100));
+    auto* infoFile = tim->addItem(new File("info", "txt", 100));
     tim->addItem(new File("data", "in"));
     tim->addItem(new Directory("data"));
 
@@ -181,7 +165,9 @@ int main() {
     */
 
     // SymLinks functionalities illustration:
-    SymLink testLink(tim, tim->getName(), "directory");
-    auto timDirCopy = dynamic_cast<const Directory*>(testLink.getAddress());
-    std::cout << timDirCopy->getSize() << '\n';
+    auto* timDirCopy = new SymLink(tim);
+    auto* infoFileCopy = new SymLink(infoFile);
+    auto currDir = dynamic_cast<Directory*>(timDirCopy->getTarget());
+    auto currFile = dynamic_cast<File*>(infoFileCopy->getTarget());
+    std::cout << currDir->getNumberOfItems() << '\n' << currFile->getSize() << '\n';
 }
